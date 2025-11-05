@@ -1,60 +1,43 @@
 import streamlit as st
-import cv2
-import tempfile
-from ultralytics import YOLO
-from helper_func import detect_signs
+from PIL import Image
+from helper_func import load_model, predict_image
 
-st.title("🤟 Real-Time Sign Language Detection")
+# -----------------------------
+# Streamlit UI setup
+# -----------------------------
+st.set_page_config(page_title="Sign Language Detection", layout="centered")
+st.title("🤟 Sign Language Detection using YOLOv8")
 
-# Load trained YOLOv8 model
-model_path = "best.pt"  # adjust if your file is elsewhere
-model = YOLO(model_path)
+# -----------------------------
+# Load Model
+# -----------------------------
+@st.cache_resource
+def get_model():
+    model = load_model("best.pt")
+    return model
 
-st.sidebar.title("Settings")
-source_option = st.sidebar.selectbox("Select Input Source", ["Webcam", "Upload Video"])
+model = get_model()
 
-if source_option == "Webcam":
-    st.info("Click 'Start Detection' to open webcam and detect signs.")
-    if st.button("Start Detection"):
-        stframe = st.empty()
-        cap = cv2.VideoCapture(0)
+# -----------------------------
+# Upload Section
+# -----------------------------
+uploaded_file = st.file_uploader("Upload a sign language image", type=["jpg", "jpeg", "png"])
 
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                st.warning("No camera input detected.")
-                break
+if uploaded_file:
+    image = Image.open(uploaded_file).convert("RGB")
+    st.image(image, caption="Uploaded Image", use_column_width=True)
 
-            # Run detection
-            annotated_frame, detected_text = detect_signs(model, frame)
+    with st.spinner("Detecting sign..."):
+        predictions, results = predict_image(model, image)
 
-            stframe.image(annotated_frame, channels="BGR", use_column_width=True)
-            st.text(f"Detected Sign: {detected_text}")
+    if predictions:
+        st.success(f"🧠 Detected sign(s): {', '.join(predictions)}")
+    else:
+        st.warning("No signs detected. Try a clearer image.")
 
-            if st.button("Stop"):
-                break
+    # Optional: display detection result image (YOLO annotated)
+    results[0].show()
+    st.image(results[0].plot(), caption="Detection Result", use_column_width=True)
 
-        cap.release()
-
-elif source_option == "Upload Video":
-    uploaded_file = st.file_uploader("Upload a video", type=["mp4", "mov", "avi"])
-    if uploaded_file:
-        tfile = tempfile.NamedTemporaryFile(delete=False)
-        tfile.write(uploaded_file.read())
-
-        st.video(tfile.name)
-        st.write("Processing video...")
-
-        # Run detection
-        cap = cv2.VideoCapture(tfile.name)
-        stframe = st.empty()
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-
-            annotated_frame, detected_text = detect_signs(model, frame)
-            stframe.image(annotated_frame, channels="BGR", use_column_width=True)
-            st.text(f"Detected Sign: {detected_text}")
-
-        cap.release()
+st.markdown("---")
+st.caption("Built with ❤️ using Streamlit & YOLOv8")
